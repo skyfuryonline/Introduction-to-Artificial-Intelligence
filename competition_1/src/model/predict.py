@@ -36,29 +36,35 @@
 
 import pandas as pd
 from Stacking import StackingClassifier
-from dataprocess.dataset import test_data
+from dataprocess.dataset import test_data,train_data
 from prepare_data import prepare_data
 
 # 加载模型
 model = StackingClassifier.load_model("my_stacking_model")
 
+# 预处理测试数据，确保特征列与训练时一致
+train_features = train_data.to_pandas().columns
+
 # 准备测试数据
-X_test, _ = prepare_data(test_data)
+X_test, _ = prepare_data(test_data,feature_columns=train_features)
 
 # 进行预测
-probabilities = model.predict_proba(X_test)
+probabilities = model.predict_proba(X_test)[:, 1]  # 仅获取命中概率
 
-test_df = pd.DataFrame(test_data)
-# 确保 shot_id 和 X_test 对应
-shot_ids = test_df.loc[X_test.index, 'shot_id'].values
+# 获取 test_data 对应的 shot_id，确保顺序正确
+shot_ids = test_data["shot_id"]
 
 # 生成预测结果 DataFrame
 predictions_df = pd.DataFrame({
     'shot_id': shot_ids,
-    'shot_made_flag': probabilities[:, 1]  # 仅保留命中概率
+    'shot_made_flag': probabilities
 })
 
 # 保存为 CSV 文件
 output_path = "final_predictions.csv"
 predictions_df.to_csv(output_path, index=False)
 print(f"预测结果已保存至 {output_path}")
+
+# 打印部分结果
+print("\n前5个预测结果：")
+print(predictions_df.head())
