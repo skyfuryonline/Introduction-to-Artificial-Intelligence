@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.metrics import accuracy_score
 
 # 加载模型
-loaded_model = StackingClassifier.load_model("my_stacking_model")
+loaded_model = StackingClassifier.load_model("")
 
 # 使用加载的模型进行预测
 X_val = pd.get_dummies(pd.DataFrame(val_data))
