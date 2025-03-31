@@ -14,12 +14,24 @@ class StackingClassifier:
     def __init__(self):
         self.xgb_model, self.tabnet_model, self.lr_model = xgb_model,tabnet_model,lr_model
         self.meta_model = LogisticRegression(random_state=42)
-
         self.scaler = StandardScaler()
 
     def fit(self, X, y):
         # 数据标准化
+
         X_scaled = self.scaler.fit_transform(X)
+
+        # batchsize=2的时候
+        '''
+        [[-1.  1.  1.  1. -1. -1.  0.  0.  0.  0.  0.  0.  0.  0.]
+        [ 1. -1. -1. -1.  1.  1.  0.  0.  0.  0.  0.  0.  0.  0.]]
+        
+        [0.0, 0.0]
+        '''
+        # print(X_scaled)
+        # input()
+        # print(y)
+        # input()
 
         # 训练基础模型并获取预测
         # XGBoost
@@ -85,19 +97,20 @@ class StackingClassifier:
         joblib.dump(self.xgb_model, f"{directory}/xgb_model.pkl")
 
         # 2. 保存TabNet模型
-        torch.save(self.tabnet_model.network.state_dict(),
-                   f"{directory}/tabnet_model.pt")
-        # 保存TabNet的配置
-        tabnet_config = {
-            'n_d': self.tabnet_model.n_d,
-            'n_a': self.tabnet_model.n_a,
-            'n_steps': self.tabnet_model.n_steps,
-            'gamma': self.tabnet_model.gamma,
-            'n_independent': self.tabnet_model.n_independent,
-            'n_shared': self.tabnet_model.n_shared
-        }
-        with open(f"{directory}/tabnet_config.pkl", 'wb') as f:
-            pickle.dump(tabnet_config, f)
+        # torch.save(self.tabnet_model.network.state_dict(),
+        #            f"{directory}/tabnet_model.pt")
+        # # 保存TabNet的配置
+        # tabnet_config = {
+        #     'n_d': self.tabnet_model.n_d,
+        #     'n_a': self.tabnet_model.n_a,
+        #     'n_steps': self.tabnet_model.n_steps,
+        #     'gamma': self.tabnet_model.gamma,
+        #     'n_independent': self.tabnet_model.n_independent,
+        #     'n_shared': self.tabnet_model.n_shared
+        # }
+        # with open(f"{directory}/tabnet_config.pkl", 'wb') as f:
+        #     pickle.dump(tabnet_config, f)
+        self.tabnet_model.save_model(f"{directory}/tabnet_model")
 
         # 3. 保存逻辑回归模型
         joblib.dump(self.lr_model, f"{directory}/lr_model.pkl")
@@ -120,13 +133,18 @@ class StackingClassifier:
         model.xgb_model = joblib.load(f"{directory}/xgb_model.pkl")
 
         # 2. 加载TabNet模型
-        with open(f"{directory}/tabnet_config.pkl", 'rb') as f:
-            tabnet_config = pickle.load(f)
-        model.tabnet_model = TabNetClassifier(**tabnet_config)
-        model.tabnet_model.network.load_state_dict(
-            torch.load(f"{directory}/tabnet_model.pt")
-        )
-        model.tabnet_model.network.eval()
+        # with open(f"{directory}/tabnet_config.pkl", 'rb') as f:
+        #     tabnet_config = pickle.load(f)
+        # model.tabnet_model = TabNetClassifier(**tabnet_config)
+        # model.tabnet_model.network.load_state_dict(
+        #     torch.load(f"{directory}/tabnet_model.pt")
+        # )
+        # model.tabnet_model.network.eval()
+
+        model.tabnet_model = TabNetClassifier()
+        model.tabnet_model.load_model(f"{directory}/tabnet_model.zip")
+        # model.tabnet_model = TabNetClassifier().load_model(f"{directory}/tabnet_model.zip")
+
 
         # 3. 加载逻辑回归模型
         model.lr_model = joblib.load(f"{directory}/lr_model.pkl")

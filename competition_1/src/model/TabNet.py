@@ -10,5 +10,5 @@ tabnet_model = TabNetClassifier(
     n_independent=2,
     n_shared=2,
     optimizer_params=dict(lr=2e-2),
-    verbose=0
+    verbose=0,
 )
