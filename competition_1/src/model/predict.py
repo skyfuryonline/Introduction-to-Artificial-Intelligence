@@ -43,7 +43,8 @@ from prepare_data import prepare_data
 model = StackingClassifier.load_model("my_stacking_model")
 
 # 预处理测试数据，确保特征列与训练时一致
-train_features = train_data.to_pandas().columns
+X_train, _ = prepare_data(train_data)
+train_features = X_train.columns.tolist()
 
 # 准备测试数据
 X_test, _ = prepare_data(test_data,feature_columns=train_features)
@@ -51,13 +52,13 @@ X_test, _ = prepare_data(test_data,feature_columns=train_features)
 # 进行预测
 probabilities = model.predict_proba(X_test)[:, 1]  # 仅获取命中概率
 
-# 获取 test_data 对应的 shot_id，确保顺序正确
-shot_ids = test_data["shot_id"]
+# 获取与 X_test 对齐的 shot_id，确保顺序一致
+shot_ids = test_data.to_pandas().loc[X_test.index, "shot_id"].values  # 确保索引一致
 
 # 生成预测结果 DataFrame
 predictions_df = pd.DataFrame({
-    'shot_id': shot_ids,
-    'shot_made_flag': probabilities
+    "shot_id": shot_ids,
+    "shot_made_flag": probabilities
 })
 
 # 保存为 CSV 文件
