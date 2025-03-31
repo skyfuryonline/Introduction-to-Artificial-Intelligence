@@ -33,6 +33,7 @@ Index(['loc_x', 'loc_y', 'shot_distance', 'minutes_remaining',
       dtype='object')
 '''
 print("开始训练！")
+
 # 顺序切分
 # X = X.iloc[:2000]
 # y = y[:2000]  # y是列表，直接切片
