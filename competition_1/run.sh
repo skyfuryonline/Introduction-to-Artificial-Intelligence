@@ -1,2 +1,2 @@
 python D:\PycharmProjects\Introduction-to-Artificial-Intelligence\competition_1\src\model\train.py && \
-python D:\PycharmProjects\Introduction-to-Artificial-Intelligence\competition_1\src\model\predict.py
+python D:\PycharmProjects\Introduction-to-Artificial-Intelligence\competition_1\src\model\evaluate.py

@@ -19,11 +19,23 @@ model = StackingClassifier()
 '''
 
 X,y = prepare_data(train_data)
+# print(X.columns)
+'''
+Index(['loc_x', 'loc_y', 'shot_distance', 'minutes_remaining',
+       'seconds_remaining', 'period', 'shot_type_2PT Field Goal',
+       'shot_type_3PT Field Goal', 'shot_zone_area_Back Court(BC)',
+       'shot_zone_area_Center(C)', 'shot_zone_area_Left Side Center(LC)',
+       'shot_zone_area_Left Side(L)', 'shot_zone_area_Right Side Center(RC)',
+       'shot_zone_area_Right Side(R)'],
+      dtype='object')
+'''
 print("开始训练！")
 # 顺序切分
-# X = X.iloc[:10]
-# y = y[:10]  # y是列表，直接切片
+# X = X.iloc[:2000]
+# y = y[:2000]  # y是列表，直接切片
+
 model.fit(X,y)
+
 # 保存模型
 print("开始保存模型！")
 model.save_model("my_stacking_model")
