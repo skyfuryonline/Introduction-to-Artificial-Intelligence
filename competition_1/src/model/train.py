@@ -6,7 +6,6 @@ from prepare_data import prepare_data
 
 model = StackingClassifier()
 
-
 # # 计算 'shot_made_flag' 列的取值占比
 # train_data = pd.DataFrame(train_data)
 # value_counts = train_data['shot_made_flag'].value_counts(normalize=True)
