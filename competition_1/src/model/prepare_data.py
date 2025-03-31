@@ -1,6 +1,4 @@
 import pandas as pd
-
-
 def prepare_data(dataset, feature_columns=None):
     """
     处理Dataset类型的数据，将其转换为模型可用的特征矩阵X和目标向量y

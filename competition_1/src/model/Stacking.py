@@ -161,7 +161,7 @@
 #         return model
 
 
-# 简单的stacking
+# # 简单的stacking
 # from sklearn.linear_model import LogisticRegression
 # from xgboost import XGBClassifier
 # from sklearn.preprocessing import StandardScaler
@@ -217,7 +217,7 @@
 
 
 
-
+# # 过拟合版本RF
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 import numpy as np
@@ -231,7 +231,6 @@ class StackingClassifier:
     def fit(self, X, y):
         # 数据标准化
         X_scaled = self.scaler.fit_transform(X)
-
         # 训练随机森林
         self.rf_model.fit(X_scaled, y)
         return self

@@ -9,10 +9,10 @@ from prepare_data import prepare_data
 # 加载模型
 loaded_model = StackingClassifier.load_model("my_stacking_model")
 
-# 使用加载的模型进行预测：最开始：0.5696
+# RF：使用加载的模型进行预测：最开始：0.5696
 # X_val,y_val =  prepare_data(val_data)
 
-# 查看训练集上的情况：0.9713
+# RF:查看训练集上的情况：0.9713
 X_val,y_val =  prepare_data(train_data)
 
 # print(X_val.columns)
