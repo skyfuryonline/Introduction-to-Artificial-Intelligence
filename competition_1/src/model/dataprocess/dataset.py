@@ -1,8 +1,9 @@
-from datasets import load_dataset
+from datasets import load_dataset,concatenate_datasets
 
 train_data = load_dataset("json",data_files=r"D:\PycharmProjects\Introduction-to-Artificial-Intelligence\competition_1\data\train.jsonl",split='train')
 val_data = load_dataset("json",data_files=r"D:\PycharmProjects\Introduction-to-Artificial-Intelligence\competition_1\data\val.jsonl",split='train')
 test_data = load_dataset("json",data_files=r"D:\PycharmProjects\Introduction-to-Artificial-Intelligence\competition_1\data\test.jsonl",split='train')
+data = concatenate_datasets([train_data, val_data, test_data])
 # print(train_data)
 # print(val_data)
 # print(test_data)
