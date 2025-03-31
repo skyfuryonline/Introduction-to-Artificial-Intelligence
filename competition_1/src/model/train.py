@@ -1,10 +1,14 @@
 import pandas as pd
 
 from Stacking import StackingClassifier
+# from Stacking import NeuralNetClassifier
+
+
 from dataprocess.dataset import train_data
 from prepare_data import prepare_data
 
 model = StackingClassifier()
+# model = NeuralNetClassifier()
 
 # # 计算 'shot_made_flag' 列的取值占比
 # train_data = pd.DataFrame(train_data)
@@ -38,3 +42,5 @@ model.fit(X,y)
 # 保存模型
 print("开始保存模型！")
 model.save_model("my_stacking_model")
+
+
