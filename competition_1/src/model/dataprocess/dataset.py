@@ -2,7 +2,7 @@ from datasets import load_dataset
 
 train_data = load_dataset("json",data_files="../data/train.jsonl",split='train')
 val_data = load_dataset("json",data_files="../data/val.jsonl",split='train')
-
+test_data = load_dataset("json",data_files="../data/test.jsonl",split='train')
 # print(train_data)
 # print(val_data)
 '''

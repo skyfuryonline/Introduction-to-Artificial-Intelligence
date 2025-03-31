@@ -22,3 +22,5 @@ model = StackingClassifier()
 X,y = prepare_data(train_data)
 
 model.fit(X,y)
+# 保存模型
+model.save_model("my_stacking_model")
