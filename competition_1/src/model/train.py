@@ -2,11 +2,10 @@ import pandas as pd
 from Stacking import StackingClassifier
 # from Stacking import NeuralNetClassifier
 
-
 from dataprocess.dataset import train_data,val_data
 from prepare_data import prepare_data
 
-model = StackingClassifier()
+# model = StackingClassifier()
 # model = NeuralNetClassifier()
 
 # # 计算 'shot_made_flag' 列的取值占比
@@ -37,11 +36,11 @@ print("开始训练！")
 # X = X.iloc[:2000]
 # y = y[:2000]  # y是列表，直接切片
 
-model.fit(X,y)
+# model.fit(X,y)
 
 # 保存模型
-print("开始保存模型！")
-model.save_model("best_rf_model")
+# print("开始保存模型！")
+# model.save_model("best_model")
 
 
 # XGBoost使用网格搜索
@@ -78,3 +77,58 @@ model.save_model("best_rf_model")
 # # 保存最佳模型
 # best_model.save_model("best_xgb_model")
 
+
+
+
+#stacking使用网格搜索
+# 包装器类不再需要，直接使用 StackingClassifier
+from sklearn.model_selection import GridSearchCV
+
+# 定义参数网格
+param_grid = {
+    'xgb_params': [
+        {'n_estimators': 200, 'max_depth': 3, 'learning_rate': 0.1, 'reg_lambda': 1.0},
+        {'n_estimators': 300, 'max_depth': 4, 'learning_rate': 0.05, 'reg_lambda': 2.0},
+        {'n_estimators': 400, 'max_depth': 5, 'learning_rate': 0.01, 'reg_lambda': 0.5}
+    ],
+    'tabnet_params': [
+        {'n_d': 8, 'n_a': 8, 'n_steps': 3, 'gamma': 1.3},
+        {'n_d': 16, 'n_a': 16, 'n_steps': 5, 'gamma': 1.5},
+        {'n_d': 32, 'n_a': 32, 'n_steps': 7, 'gamma': 1.7}
+    ],
+    'lr_params': [
+        {'C': 0.1, 'max_iter': 1000},
+        {'C': 1.0, 'max_iter': 1000},
+        {'C': 10.0, 'max_iter': 1000}
+    ],
+    'meta_params': [
+        {'n_estimators': 50, 'max_depth': 5, 'min_samples_leaf': 5},
+        {'n_estimators': 100, 'max_depth': 10, 'min_samples_leaf': 5},
+        {'n_estimators': 200, 'max_depth': 15, 'min_samples_leaf': 3}
+    ],
+    'meta_model_type': ['rf']
+}
+
+# 创建网格搜索对象
+stacking_model = StackingClassifier(random_state=42)
+grid_search = GridSearchCV(
+    estimator=stacking_model,
+    param_grid=param_grid,
+    cv=5,
+    scoring='accuracy',
+    n_jobs=1,  # TabNet不支持多进程
+    verbose=2
+)
+
+# 假设 X_train, y_train, X_val, y_val 已准备好
+grid_search.fit(X, y)
+
+# 输出结果
+print("最佳参数:", grid_search.best_params_)
+print("最佳交叉验证准确率:", grid_search.best_score_)
+
+# 使用最佳模型评估验证集
+best_model = grid_search.best_estimator_
+
+# 保存最佳模型
+best_model.save_model("best_stacking_model")
