@@ -81,6 +81,8 @@ model.save_model("best_model")
 
 
 # #stacking使用网格搜索
+#一个参数组合完成5折交叉验证的时间每次24分钟，总运行时间约为 32小时24分钟。
+
 # # 直接使用 StackingClassifier
 # from sklearn.model_selection import GridSearchCV
 #
