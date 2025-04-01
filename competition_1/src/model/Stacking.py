@@ -160,156 +160,156 @@
 #         return model
 
 # 改进上述复杂的stacking 模型并结合网格搜索
-from xgboost import XGBClassifier
-from pytorch_tabnet.tab_model import TabNetClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import cross_val_predict
-import numpy as np
-import joblib
-import torch
-from pathlib import Path
-
-class StackingClassifier:
-    def __init__(self, xgb_params=None, tabnet_params=None, lr_params=None, meta_params=None,
-                 meta_model_type='rf', random_state=42):
-        """
-        初始化Stacking分类器，支持参数传递
-        """
-        # 默认参数
-        default_xgb_params = {'n_estimators': 300, 'max_depth': 4, 'learning_rate': 0.1,
-                            'reg_lambda': 1.0, 'random_state': random_state,
-                            'eval_metric': 'logloss', 'use_label_encoder': False}
-        default_tabnet_params = {'n_d': 16, 'n_a': 16, 'n_steps': 5, 'gamma': 1.5,
-                                'n_independent': 2, 'n_shared': 2,
-                                'optimizer_params': dict(lr=2e-2), 'verbose': 0}
-        default_lr_params = {'max_iter': 1000, 'random_state': random_state}
-        default_meta_rf_params = {'n_estimators': 100, 'max_depth': 10,
-                                'min_samples_leaf': 5, 'random_state': random_state}
-
-        # 使用传入参数或默认参数
-        self.xgb_params = xgb_params if xgb_params else default_xgb_params
-        self.tabnet_params = tabnet_params if tabnet_params else default_tabnet_params
-        self.lr_params = lr_params if lr_params else default_lr_params
-        self.meta_params = meta_params if meta_params else default_meta_rf_params
-        self.meta_model_type = meta_model_type
-        self.random_state = random_state
-
-        self.xgb_model = XGBClassifier(**self.xgb_params)
-        self.tabnet_model = TabNetClassifier(**self.tabnet_params)
-        self.lr_model = LogisticRegression(**self.lr_params)
-        if meta_model_type == 'rf':
-            self.meta_model = RandomForestClassifier(**self.meta_params)
-        else:
-            self.meta_model = LogisticRegression(**self.lr_params)
-
-        self.scaler = StandardScaler()
-
-    def fit(self, X, y):
-        X_scaled = self.scaler.fit_transform(X)
-        xgb_pred = cross_val_predict(self.xgb_model, X_scaled, y, cv=5, method='predict_proba')[:, 1]
-        self.xgb_model.fit(X_scaled, y)
-
-        self.tabnet_model.fit(
-            X_scaled, y,
-            max_epochs=100,
-            patience=10,
-            batch_size=32,
-            virtual_batch_size=8,
-            eval_metric=['accuracy']
-        )
-        tabnet_pred = cross_val_predict(self.tabnet_model, X_scaled, y, cv=5, method='predict_proba')[:, 1]
-
-        lr_pred = cross_val_predict(self.lr_model, X_scaled, y, cv=5, method='predict_proba')[:, 1]
-        self.lr_model.fit(X_scaled, y)
-
-        meta_features = np.column_stack((xgb_pred, tabnet_pred, lr_pred))
-        self.meta_model.fit(meta_features, y)
-
-        train_pred = self.predict(X)
-        train_accuracy = np.mean(train_pred == y)
-        print(f"训练集准确率: {train_accuracy:.4f}")
-        return self
-
-    def predict(self, X):
-        X_scaled = self.scaler.transform(X)
-        xgb_pred = self.xgb_model.predict_proba(X_scaled)[:, 1]
-        tabnet_pred = self.tabnet_model.predict_proba(X_scaled)[:, 1]
-        lr_pred = self.lr_model.predict_proba(X_scaled)[:, 1]
-        meta_features = np.column_stack((xgb_pred, tabnet_pred, lr_pred))
-        return self.meta_model.predict(meta_features)
-
-    def predict_proba(self, X):
-        X_scaled = self.scaler.transform(X)
-        xgb_pred = self.xgb_model.predict_proba(X_scaled)[:, 1]
-        tabnet_pred = self.tabnet_model.predict_proba(X_scaled)[:, 1]
-        lr_pred = self.lr_model.predict_proba(X_scaled)[:, 1]
-        meta_features = np.column_stack((xgb_pred, tabnet_pred, lr_pred))
-        return self.meta_model.predict_proba(meta_features)
-
-    def score(self, X, y):
-        pred = self.predict(X)
-        return np.mean(pred == y)
-
-    def save_model(self, directory="saved_stacking_model"):
-        Path(directory).mkdir(parents=True, exist_ok=True)
-        joblib.dump(self.xgb_model, f"{directory}/xgb_model.pkl")
-        self.tabnet_model.save_model(f"{directory}/tabnet_model")
-        joblib.dump(self.lr_model, f"{directory}/lr_model.pkl")
-        joblib.dump(self.meta_model, f"{directory}/meta_model.pkl")
-        joblib.dump(self.scaler, f"{directory}/scaler.pkl")
-        print(f"模型已保存至 {directory}")
-
-    @classmethod
-    def load_model(cls, directory="saved_stacking_model"):
-        model = cls()
-        model.xgb_model = joblib.load(f"{directory}/xgb_model.pkl")
-        model.tabnet_model = TabNetClassifier()
-        model.tabnet_model.load_model(f"{directory}/tabnet_model.zip")
-        model.lr_model = joblib.load(f"{directory}/lr_model.pkl")
-        model.meta_model = joblib.load(f"{directory}/meta_model.pkl")
-        model.scaler = joblib.load(f"{directory}/scaler.pkl")
-        print(f"模型已从 {directory} 加载")
-        return model
-
-    def get_params(self, deep=True):
-        """返回模型参数，用于GridSearchCV"""
-        return {
-            'xgb_params': self.xgb_params,
-            'tabnet_params': self.tabnet_params,
-            'lr_params': self.lr_params,
-            'meta_params': self.meta_params,
-            'meta_model_type': self.meta_model_type,
-            'random_state': self.random_state
-        }
-
-    def set_params(self, **params):
-        """设置模型参数，用于GridSearchCV"""
-        if 'xgb_params' in params:
-            self.xgb_params = params['xgb_params']
-            self.xgb_model = XGBClassifier(**self.xgb_params)
-        if 'tabnet_params' in params:
-            self.tabnet_params = params['tabnet_params']
-            self.tabnet_model = TabNetClassifier(**self.tabnet_params)
-        if 'lr_params' in params:
-            self.lr_params = params['lr_params']
-            self.lr_model = LogisticRegression(**self.lr_params)
-        if 'meta_params' in params:
-            self.meta_params = params['meta_params']
-            if self.meta_model_type == 'rf':
-                self.meta_model = RandomForestClassifier(**self.meta_params)
-            else:
-                self.meta_model = LogisticRegression(**self.meta_params)
-        if 'meta_model_type' in params:
-            self.meta_model_type = params['meta_model_type']
-            if self.meta_model_type == 'rf':
-                self.meta_model = RandomForestClassifier(**self.meta_params)
-            else:
-                self.meta_model = LogisticRegression(**self.meta_params)
-        if 'random_state' in params:
-            self.random_state = params['random_state']
-        return self
+# from xgboost import XGBClassifier
+# from pytorch_tabnet.tab_model import TabNetClassifier
+# from sklearn.linear_model import LogisticRegression
+# from sklearn.ensemble import RandomForestClassifier
+# from sklearn.preprocessing import StandardScaler
+# from sklearn.model_selection import cross_val_predict
+# import numpy as np
+# import joblib
+# import torch
+# from pathlib import Path
+#
+# class StackingClassifier:
+#     def __init__(self, xgb_params=None, tabnet_params=None, lr_params=None, meta_params=None,
+#                  meta_model_type='rf', random_state=42):
+#         """
+#         初始化Stacking分类器，支持参数传递
+#         """
+#         # 默认参数
+#         default_xgb_params = {'n_estimators': 300, 'max_depth': 4, 'learning_rate': 0.1,
+#                             'reg_lambda': 1.0, 'random_state': random_state,
+#                             'eval_metric': 'logloss', 'use_label_encoder': False}
+#         default_tabnet_params = {'n_d': 16, 'n_a': 16, 'n_steps': 5, 'gamma': 1.5,
+#                                 'n_independent': 2, 'n_shared': 2,
+#                                 'optimizer_params': dict(lr=2e-2), 'verbose': 0}
+#         default_lr_params = {'max_iter': 1000, 'random_state': random_state}
+#         default_meta_rf_params = {'n_estimators': 100, 'max_depth': 10,
+#                                 'min_samples_leaf': 5, 'random_state': random_state}
+#
+#         # 使用传入参数或默认参数
+#         self.xgb_params = xgb_params if xgb_params else default_xgb_params
+#         self.tabnet_params = tabnet_params if tabnet_params else default_tabnet_params
+#         self.lr_params = lr_params if lr_params else default_lr_params
+#         self.meta_params = meta_params if meta_params else default_meta_rf_params
+#         self.meta_model_type = meta_model_type
+#         self.random_state = random_state
+#
+#         self.xgb_model = XGBClassifier(**self.xgb_params)
+#         self.tabnet_model = TabNetClassifier(**self.tabnet_params)
+#         self.lr_model = LogisticRegression(**self.lr_params)
+#         if meta_model_type == 'rf':
+#             self.meta_model = RandomForestClassifier(**self.meta_params)
+#         else:
+#             self.meta_model = LogisticRegression(**self.lr_params)
+#
+#         self.scaler = StandardScaler()
+#
+#     def fit(self, X, y):
+#         X_scaled = self.scaler.fit_transform(X)
+#         xgb_pred = cross_val_predict(self.xgb_model, X_scaled, y, cv=5, method='predict_proba')[:, 1]
+#         self.xgb_model.fit(X_scaled, y)
+#
+#         self.tabnet_model.fit(
+#             X_scaled, y,
+#             max_epochs=100,
+#             patience=10,
+#             batch_size=32,
+#             virtual_batch_size=8,
+#             eval_metric=['accuracy']
+#         )
+#         tabnet_pred = cross_val_predict(self.tabnet_model, X_scaled, y, cv=5, method='predict_proba')[:, 1]
+#
+#         lr_pred = cross_val_predict(self.lr_model, X_scaled, y, cv=5, method='predict_proba')[:, 1]
+#         self.lr_model.fit(X_scaled, y)
+#
+#         meta_features = np.column_stack((xgb_pred, tabnet_pred, lr_pred))
+#         self.meta_model.fit(meta_features, y)
+#
+#         train_pred = self.predict(X)
+#         train_accuracy = np.mean(train_pred == y)
+#         print(f"训练集准确率: {train_accuracy:.4f}")
+#         return self
+#
+#     def predict(self, X):
+#         X_scaled = self.scaler.transform(X)
+#         xgb_pred = self.xgb_model.predict_proba(X_scaled)[:, 1]
+#         tabnet_pred = self.tabnet_model.predict_proba(X_scaled)[:, 1]
+#         lr_pred = self.lr_model.predict_proba(X_scaled)[:, 1]
+#         meta_features = np.column_stack((xgb_pred, tabnet_pred, lr_pred))
+#         return self.meta_model.predict(meta_features)
+#
+#     def predict_proba(self, X):
+#         X_scaled = self.scaler.transform(X)
+#         xgb_pred = self.xgb_model.predict_proba(X_scaled)[:, 1]
+#         tabnet_pred = self.tabnet_model.predict_proba(X_scaled)[:, 1]
+#         lr_pred = self.lr_model.predict_proba(X_scaled)[:, 1]
+#         meta_features = np.column_stack((xgb_pred, tabnet_pred, lr_pred))
+#         return self.meta_model.predict_proba(meta_features)
+#
+#     def score(self, X, y):
+#         pred = self.predict(X)
+#         return np.mean(pred == y)
+#
+#     def save_model(self, directory="saved_stacking_model"):
+#         Path(directory).mkdir(parents=True, exist_ok=True)
+#         joblib.dump(self.xgb_model, f"{directory}/xgb_model.pkl")
+#         self.tabnet_model.save_model(f"{directory}/tabnet_model")
+#         joblib.dump(self.lr_model, f"{directory}/lr_model.pkl")
+#         joblib.dump(self.meta_model, f"{directory}/meta_model.pkl")
+#         joblib.dump(self.scaler, f"{directory}/scaler.pkl")
+#         print(f"模型已保存至 {directory}")
+#
+#     @classmethod
+#     def load_model(cls, directory="saved_stacking_model"):
+#         model = cls()
+#         model.xgb_model = joblib.load(f"{directory}/xgb_model.pkl")
+#         model.tabnet_model = TabNetClassifier()
+#         model.tabnet_model.load_model(f"{directory}/tabnet_model.zip")
+#         model.lr_model = joblib.load(f"{directory}/lr_model.pkl")
+#         model.meta_model = joblib.load(f"{directory}/meta_model.pkl")
+#         model.scaler = joblib.load(f"{directory}/scaler.pkl")
+#         print(f"模型已从 {directory} 加载")
+#         return model
+#
+#     def get_params(self, deep=True):
+#         """返回模型参数，用于GridSearchCV"""
+#         return {
+#             'xgb_params': self.xgb_params,
+#             'tabnet_params': self.tabnet_params,
+#             'lr_params': self.lr_params,
+#             'meta_params': self.meta_params,
+#             'meta_model_type': self.meta_model_type,
+#             'random_state': self.random_state
+#         }
+#
+#     def set_params(self, **params):
+#         """设置模型参数，用于GridSearchCV"""
+#         if 'xgb_params' in params:
+#             self.xgb_params = params['xgb_params']
+#             self.xgb_model = XGBClassifier(**self.xgb_params)
+#         if 'tabnet_params' in params:
+#             self.tabnet_params = params['tabnet_params']
+#             self.tabnet_model = TabNetClassifier(**self.tabnet_params)
+#         if 'lr_params' in params:
+#             self.lr_params = params['lr_params']
+#             self.lr_model = LogisticRegression(**self.lr_params)
+#         if 'meta_params' in params:
+#             self.meta_params = params['meta_params']
+#             if self.meta_model_type == 'rf':
+#                 self.meta_model = RandomForestClassifier(**self.meta_params)
+#             else:
+#                 self.meta_model = LogisticRegression(**self.meta_params)
+#         if 'meta_model_type' in params:
+#             self.meta_model_type = params['meta_model_type']
+#             if self.meta_model_type == 'rf':
+#                 self.meta_model = RandomForestClassifier(**self.meta_params)
+#             else:
+#                 self.meta_model = LogisticRegression(**self.meta_params)
+#         if 'random_state' in params:
+#             self.random_state = params['random_state']
+#         return self
 
 
 
@@ -423,7 +423,7 @@ class StackingClassifier:
 # from pathlib import Path
 #
 # class StackingClassifier:
-#     def __init__(self, n_estimators=800, max_depth=20, min_samples_leaf=5, random_state=42):
+#     def __init__(self, n_estimators=1000, max_depth=5, min_samples_leaf=5, random_state=42):
 #         """
 #         初始化随机森林分类器，添加控制过拟合的参数
 #         """
@@ -492,79 +492,79 @@ class StackingClassifier:
 
 
 
-# 换用XGBoost
-# from xgboost import XGBClassifier
-# from lightgbm import LGBMClassifier
-# from sklearn.preprocessing import StandardScaler
-# from sklearn.ensemble import VotingClassifier
-# import joblib
-# from pathlib import Path
-#
-# class StackingClassifier:
-#     def __init__(self, n_estimators=450, max_depth=10, learning_rate=0.01, reg_lambda=1.0, random_state=42):
-#         """
-#         初始化集成模型：XGBoost + LightGBM
-#         """
-#         self.xgb = XGBClassifier(
-#             n_estimators=n_estimators,
-#             max_depth=max_depth,
-#             learning_rate=learning_rate,
-#             reg_lambda=reg_lambda,
-#             random_state=random_state,
-#             eval_metric='logloss',
-#             use_label_encoder=False
-#         )
-#         self.lgbm = LGBMClassifier(
-#             n_estimators=n_estimators,
-#             max_depth=max_depth,
-#             learning_rate=learning_rate,
-#             reg_lambda=reg_lambda,
-#             random_state=random_state
-#         )
-#         self.model = VotingClassifier(
-#             estimators=[('xgb', self.xgb), ('lgbm', self.lgbm)],
-#             voting='soft'
-#         )
-#         self.scaler = StandardScaler()
-#
-#     def fit(self, X, y):
-#         """训练模型"""
-#         X_scaled = self.scaler.fit_transform(X)
-#         self.model.fit(X_scaled, y)
-#         train_accuracy = self.model.score(X_scaled, y)
-#         print(f"训练集准确率: {train_accuracy:.4f}")
-#         return self
-#
-#     def predict(self, X):
-#         """预测类别"""
-#         X_scaled = self.scaler.transform(X)
-#         return self.model.predict(X_scaled)
-#
-#     def predict_proba(self, X):
-#         """预测概率"""
-#         X_scaled = self.scaler.transform(X)
-#         return self.model.predict_proba(X_scaled)
-#
-#     def score(self, X, y):
-#         """计算准确率"""
-#         X_scaled = self.scaler.transform(X)
-#         return self.model.score(X_scaled, y)
-#
-#     def save_model(self, directory="saved_voting_model"):
-#         """保存模型"""
-#         Path(directory).mkdir(parents=True, exist_ok=True)
-#         joblib.dump(self.model, f"{directory}/voting_model.pkl")
-#         joblib.dump(self.scaler, f"{directory}/scaler.pkl")
-#         print(f"模型已保存至 {directory}")
-#
-#     @classmethod
-#     def load_model(cls, directory="saved_voting_model"):
-#         """加载模型"""
-#         model = cls()
-#         model.model = joblib.load(f"{directory}/voting_model.pkl")
-#         model.scaler = joblib.load(f"{directory}/scaler.pkl")
-#         print(f"模型已从 {directory} 加载")
-#         return model
+# # 换用XGBoost----目前最好
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import VotingClassifier
+import joblib
+from pathlib import Path
+
+class StackingClassifier:
+    def __init__(self, n_estimators=1000, max_depth=5, learning_rate=0.01, reg_lambda=1.0, random_state=42):
+        """
+        初始化集成模型：XGBoost + LightGBM
+        """
+        self.xgb = XGBClassifier(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            learning_rate=learning_rate,
+            reg_lambda=reg_lambda,
+            random_state=random_state,
+            eval_metric='logloss',
+            use_label_encoder=False
+        )
+        self.lgbm = LGBMClassifier(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            learning_rate=learning_rate,
+            reg_lambda=reg_lambda,
+            random_state=random_state
+        )
+        self.model = VotingClassifier(
+            estimators=[('xgb', self.xgb), ('lgbm', self.lgbm)],
+            voting='soft'
+        )
+        self.scaler = StandardScaler()
+
+    def fit(self, X, y):
+        """训练模型"""
+        X_scaled = self.scaler.fit_transform(X)
+        self.model.fit(X_scaled, y)
+        train_accuracy = self.model.score(X_scaled, y)
+        print(f"训练集准确率: {train_accuracy:.4f}")
+        return self
+
+    def predict(self, X):
+        """预测类别"""
+        X_scaled = self.scaler.transform(X)
+        return self.model.predict(X_scaled)
+
+    def predict_proba(self, X):
+        """预测概率"""
+        X_scaled = self.scaler.transform(X)
+        return self.model.predict_proba(X_scaled)
+
+    def score(self, X, y):
+        """计算准确率"""
+        X_scaled = self.scaler.transform(X)
+        return self.model.score(X_scaled, y)
+
+    def save_model(self, directory="saved_voting_model"):
+        """保存模型"""
+        Path(directory).mkdir(parents=True, exist_ok=True)
+        joblib.dump(self.model, f"{directory}/voting_model.pkl")
+        joblib.dump(self.scaler, f"{directory}/scaler.pkl")
+        print(f"模型已保存至 {directory}")
+
+    @classmethod
+    def load_model(cls, directory="saved_voting_model"):
+        """加载模型"""
+        model = cls()
+        model.model = joblib.load(f"{directory}/voting_model.pkl")
+        model.scaler = joblib.load(f"{directory}/scaler.pkl")
+        print(f"模型已从 {directory} 加载")
+        return model
 
 
 # 神经网络
@@ -711,3 +711,225 @@ class StackingClassifier:
 #         model.scaler = joblib.load(f"{directory}/scaler.pkl")
 #         print(f"模型已从 {directory} 加载")
 #         return model
+
+
+
+# 单独只使用tabnet
+# from pytorch_tabnet.tab_model import TabNetClassifier
+# from sklearn.preprocessing import StandardScaler
+# import numpy as np
+# import joblib
+# from pathlib import Path
+#
+# class StackingClassifier:
+#     def __init__(self, n_d=16, n_a=16, n_steps=5, random_state=42):
+#         """
+#         初始化Stacking分类器，使用TabNet
+#         :param n_d: 决策特征维度
+#         :param n_a: 注意力特征维度
+#         :param n_steps: 注意力步骤数
+#         :param random_state: 随机种子
+#         """
+#         self.tabnet_model = TabNetClassifier(
+#             n_d=n_d,              # 决策特征维度
+#             n_a=n_a,              # 注意力特征维度
+#             n_steps=n_steps,      # 注意力步骤数
+#             gamma=1.5,            # 稀疏正则化参数
+#             n_independent=2,      # 独立GLU层数
+#             n_shared=2,           # 共享GLU层数
+#             optimizer_params=dict(lr=2e-2),  # 优化器学习率
+#             seed=random_state,    # 随机种子
+#             verbose=0             # 关闭详细输出
+#         )
+#         self.scaler = StandardScaler()
+#
+#     def fit(self, X, y):
+#         """训练模型"""
+#         # 数据标准化
+#         X_scaled = self.scaler.fit_transform(X)
+#         # 训练TabNet
+#         self.tabnet_model.fit(
+#             X_train=X_scaled,
+#             y_train=y,
+#             max_epochs=100,       # 最大训练轮次
+#             patience=10,          # 早停耐心
+#             batch_size=32,        # 批次大小
+#             virtual_batch_size=8, # 虚拟批次大小（Ghost BN）
+#             eval_metric=['accuracy']  # 评估指标
+#         )
+#         return self
+#
+#     def predict(self, X):
+#         """预测类别"""
+#         X_scaled = self.scaler.transform(X)
+#         return self.tabnet_model.predict(X_scaled)
+#
+#     def predict_proba(self, X):
+#         """预测概率"""
+#         X_scaled = self.scaler.transform(X)
+#         return self.tabnet_model.predict_proba(X_scaled)
+#
+#     def save_model(self, directory="saved_tabnet_model"):
+#         """保存模型"""
+#         Path(directory).mkdir(parents=True, exist_ok=True)
+#         # 保存TabNet模型
+#         self.tabnet_model.save_model(f"{directory}/tabnet_model")
+#         # 保存标准化器
+#         joblib.dump(self.scaler, f"{directory}/scaler.pkl")
+#         print(f"模型已保存至 {directory}")
+#
+#     @classmethod
+#     def load_model(cls, directory="saved_tabnet_model"):
+#         """加载模型"""
+#         model = cls()  # 使用默认参数初始化
+#         # 加载TabNet模型
+#         model.tabnet_model = TabNetClassifier()
+#         model.tabnet_model.load_model(f"{directory}/tabnet_model.zip")
+#         # 加载标准化器
+#         model.scaler = joblib.load(f"{directory}/scaler.pkl")
+#         print(f"模型已从 {directory} 加载")
+#         return model
+
+
+# 使用XGboost和RF，MLP作为meta
+# from xgboost import XGBClassifier
+# from sklearn.ensemble import RandomForestClassifier
+# from sklearn.neural_network import MLPClassifier
+# from sklearn.preprocessing import StandardScaler
+# from sklearn.model_selection import cross_val_predict
+# import numpy as np
+# import joblib
+# from pathlib import Path
+#
+# class StackingClassifier:
+#     def __init__(self, xgb_params=None, rf_params=None, meta_params=None, random_state=42):
+#         """
+#         初始化Stacking分类器，使用XGBoost和RandomForest作为基础模型，MLP作为元模型
+#         :param xgb_params: XGBoost参数字典
+#         :param rf_params: RandomForest参数字典
+#         :param meta_params: MLP元模型参数字典
+#         :param random_state: 随机种子
+#         """
+#         # 默认参数
+#         default_xgb_params = {
+#             'n_estimators': 550,
+#             'max_depth': 5,
+#             'learning_rate': 0.01,
+#             'reg_lambda': 1.0,
+#             'random_state': random_state,
+#             'eval_metric': 'logloss',
+#             'use_label_encoder': False
+#         }
+#         default_rf_params = {
+#             'n_estimators': 800,
+#             'max_depth': 20,
+#             'min_samples_leaf': 5,
+#             'random_state': random_state
+#         }
+#         default_meta_params = {
+#             'hidden_layer_sizes': (100, 50),  # 两层隐藏层：100和50个神经元
+#             'max_iter': 500,
+#             'random_state': random_state,
+#             'early_stopping': True,  # 早停防止过拟合
+#             'validation_fraction': 0.1,
+#             'n_iter_no_change': 10
+#         }
+#
+#         # 使用传入参数或默认参数
+#         self.xgb_params = xgb_params if xgb_params else default_xgb_params
+#         self.rf_params = rf_params if rf_params else default_rf_params
+#         self.meta_params = meta_params if meta_params else default_meta_params
+#         self.random_state = random_state
+#
+#         self.xgb_model = XGBClassifier(**self.xgb_params)
+#         self.rf_model = RandomForestClassifier(**self.rf_params)
+#         self.meta_model = MLPClassifier(**self.meta_params)
+#         self.scaler = StandardScaler()
+#
+#     def fit(self, X, y):
+#         """训练模型，使用交叉验证生成meta特征"""
+#         X_scaled = self.scaler.fit_transform(X)
+#
+#         # 交叉验证生成基础模型预测
+#         xgb_pred = cross_val_predict(self.xgb_model, X_scaled, y, cv=5, method='predict_proba')[:, 1]
+#         self.xgb_model.fit(X_scaled, y)
+#
+#         rf_pred = cross_val_predict(self.rf_model, X_scaled, y, cv=5, method='predict_proba')[:, 1]
+#         self.rf_model.fit(X_scaled, y)
+#
+#         # 创建meta特征
+#         meta_features = np.column_stack((xgb_pred, rf_pred))
+#
+#         # 训练meta模型（MLP）
+#         self.meta_model.fit(meta_features, y)
+#
+#         # 评估训练集性能
+#         train_pred = self.predict(X)
+#         train_accuracy = np.mean(train_pred == y)
+#         print(f"训练集准确率: {train_accuracy:.4f}")
+#         return self
+#
+#     def predict(self, X):
+#         """预测类别"""
+#         X_scaled = self.scaler.transform(X)
+#         xgb_pred = self.xgb_model.predict_proba(X_scaled)[:, 1]
+#         rf_pred = self.rf_model.predict_proba(X_scaled)[:, 1]
+#         meta_features = np.column_stack((xgb_pred, rf_pred))
+#         return self.meta_model.predict(meta_features)
+#
+#     def predict_proba(self, X):
+#         """预测概率"""
+#         X_scaled = self.scaler.transform(X)
+#         xgb_pred = self.xgb_model.predict_proba(X_scaled)[:, 1]
+#         rf_pred = self.rf_model.predict_proba(X_scaled)[:, 1]
+#         meta_features = np.column_stack((xgb_pred, rf_pred))
+#         return self.meta_model.predict_proba(meta_features)
+#
+#     def score(self, X, y):
+#         """计算准确率"""
+#         pred = self.predict(X)
+#         return np.mean(pred == y)
+#
+#     def save_model(self, directory="saved_stacking_model"):
+#         """保存模型"""
+#         Path(directory).mkdir(parents=True, exist_ok=True)
+#         joblib.dump(self.xgb_model, f"{directory}/xgb_model.pkl")
+#         joblib.dump(self.rf_model, f"{directory}/rf_model.pkl")
+#         joblib.dump(self.meta_model, f"{directory}/meta_model.pkl")
+#         joblib.dump(self.scaler, f"{directory}/scaler.pkl")
+#         print(f"模型已保存至 {directory}")
+#
+#     @classmethod
+#     def load_model(cls, directory="saved_stacking_model"):
+#         """加载模型"""
+#         model = cls()  # 使用默认参数初始化
+#         model.xgb_model = joblib.load(f"{directory}/xgb_model.pkl")
+#         model.rf_model = joblib.load(f"{directory}/rf_model.pkl")
+#         model.meta_model = joblib.load(f"{directory}/meta_model.pkl")
+#         model.scaler = joblib.load(f"{directory}/scaler.pkl")
+#         print(f"模型已从 {directory} 加载")
+#         return model
+#
+#     def get_params(self, deep=True):
+#         """返回模型参数，用于GridSearchCV"""
+#         return {
+#             'xgb_params': self.xgb_params,
+#             'rf_params': self.rf_params,
+#             'meta_params': self.meta_params,
+#             'random_state': self.random_state
+#         }
+#
+#     def set_params(self, **params):
+#         """设置模型参数，用于GridSearchCV"""
+#         if 'xgb_params' in params:
+#             self.xgb_params = params['xgb_params']
+#             self.xgb_model = XGBClassifier(**self.xgb_params)
+#         if 'rf_params' in params:
+#             self.rf_params = params['rf_params']
+#             self.rf_model = RandomForestClassifier(**self.rf_params)
+#         if 'meta_params' in params:
+#             self.meta_params = params['meta_params']
+#             self.meta_model = MLPClassifier(**self.meta_params)
+#         if 'random_state' in params:
+#             self.random_state = params['random_state']
+#         return self
