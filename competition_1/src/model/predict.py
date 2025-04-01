@@ -65,7 +65,7 @@ predictions_df = pd.DataFrame({
 })
 
 # 保存为 CSV 文件
-output_path = "../../results/xgb_grid_search.csv"
+output_path = "./final_results.csv"
 predictions_df.to_csv(output_path, index=False)
 print(f"预测结果已保存至 {output_path}")
 
