@@ -41,7 +41,7 @@ model.fit(X,y)
 
 # 保存模型
 print("开始保存模型！")
-model.save_model("saved_xgb_model")
+model.save_model("best_rf_model")
 
 
 # XGBoost使用网格搜索

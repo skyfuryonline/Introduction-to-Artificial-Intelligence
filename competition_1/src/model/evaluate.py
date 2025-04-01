@@ -9,8 +9,8 @@ from sklearn.metrics import accuracy_score
 from prepare_data import prepare_data
 
 # 加载模型
-loaded_model = StackingClassifier.load_model("saved_xgb_model")
-# loaded_model = NeuralNetClassifier.load_model("saved_xgb_model")
+loaded_model = StackingClassifier.load_model("best_rf_model")
+# loaded_model = NeuralNetClassifier.load_model("best_rf_model")
 
 # RF:查看训练集上的情况：0.9713
 X_train,y_train =  prepare_data(train_data)
@@ -32,7 +32,7 @@ Index(['loc_x', 'loc_y', 'shot_distance', 'minutes_remaining',
 # print(len(X_val))
 # print(len(y_val))
 '''
-模型已从 saved_xgb_model 加载
+模型已从 best_rf_model 加载
 5140
 5140
 '''
