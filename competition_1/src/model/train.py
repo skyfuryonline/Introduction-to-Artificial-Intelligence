@@ -1,10 +1,9 @@
 import pandas as pd
-
 from Stacking import StackingClassifier
 # from Stacking import NeuralNetClassifier
 
 
-from dataprocess.dataset import train_data
+from dataprocess.dataset import train_data,val_data
 from prepare_data import prepare_data
 
 model = StackingClassifier()
@@ -42,6 +41,40 @@ model.fit(X,y)
 
 # 保存模型
 print("开始保存模型！")
-model.save_model("my_stacking_model")
+model.save_model("saved_xgb_model")
 
+
+# XGBoost使用网格搜索
+# from xgboost import XGBClassifier
+# model = StackingClassifier(n_estimators=500, max_depth=6, learning_rate=0.05, random_state=42)
+# # 准备数据
+# X_train, y_train = prepare_data(train_data)
+# X_val, y_val = prepare_data(val_data, feature_columns=X_train.columns)
+# # 网格搜索优化超参数
+# from sklearn.model_selection import GridSearchCV
+# param_grid = {
+#     'n_estimators': [300, 500, 700],
+#     'max_depth': [4, 6, 8],
+#     'learning_rate': [0.01, 0.05, 0.1]
+# }
+# xgb = XGBClassifier(random_state=42, eval_metric='logloss', use_label_encoder=False)
+# x_train_scaled = model.scaler.fit_transform(X_train)
+# grid_search = GridSearchCV(xgb, param_grid, cv=5, scoring='accuracy', n_jobs=-1)
+# grid_search.fit(x_train_scaled, y_train)
+# print("最佳参数:", grid_search.best_params_)
+# print("最佳交叉验证准确率:", grid_search.best_score_)
+#
+# # 使用最佳参数重新训练
+# best_model = StackingClassifier(
+#     n_estimators=grid_search.best_params_['n_estimators'],
+#     max_depth=grid_search.best_params_['max_depth'],
+#     learning_rate=grid_search.best_params_['learning_rate'],
+#     random_state=42
+# )
+# best_model.fit(X_train, y_train)
+# final_val_accuracy = best_model.score(X_val, y_val)
+# print(f"最终验证集准确率: {final_val_accuracy:.4f}")
+#
+# # 保存最佳模型
+# best_model.save_model("best_xgb_model")
 

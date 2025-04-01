@@ -423,7 +423,7 @@ class StackingClassifier:
 #
 #
 # class NeuralNetClassifier:
-#     def __init__(self, hidden_layer_sizes=(100, 50), max_iter=500, random_state=42):
+#     def __init__(self, hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42):
 #         """
 #         初始化神经网络分类器
 #         """
@@ -478,6 +478,83 @@ class StackingClassifier:
 #         """加载模型"""
 #         model = cls()
 #         model.model = joblib.load(f"{directory}/mlp_model.pkl")
+#         model.scaler = joblib.load(f"{directory}/scaler.pkl")
+#         print(f"模型已从 {directory} 加载")
+#         return model
+
+
+
+# XGBoost结合网格搜索
+# from xgboost import XGBClassifier
+# from sklearn.preprocessing import StandardScaler
+# from sklearn.model_selection import cross_val_score
+# import joblib
+# from pathlib import Path
+# import numpy as np
+# import pandas as pd
+# class StackingClassifier:
+#     def __init__(self, n_estimators=500, max_depth=6, learning_rate=0.05, random_state=42):
+#         """
+#         初始化XGBoost分类器
+#         """
+#         self.model = XGBClassifier(
+#             n_estimators=n_estimators,
+#             max_depth=max_depth,
+#             learning_rate=learning_rate,
+#             random_state=random_state,
+#             eval_metric='logloss',
+#             use_label_encoder=False
+#         )
+#         self.scaler = StandardScaler()
+#
+#     def fit(self, X, y):
+#         """训练模型"""
+#         X_scaled = self.scaler.fit_transform(X)
+#         self.model.fit(X_scaled, y)
+#         train_accuracy = self.model.score(X_scaled, y)
+#         print(f"训练集准确率: {train_accuracy:.4f}")
+#
+#         # 交叉验证
+#         cv_scores = cross_val_score(self.model, X_scaled, y, cv=5)
+#         print(f"5折交叉验证准确率: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
+#         return self
+#
+#     def predict(self, X):
+#         """预测类别"""
+#         X_scaled = self.scaler.transform(X)
+#         return self.model.predict(X_scaled)
+#
+#     def predict_proba(self, X):
+#         """预测概率"""
+#         X_scaled = self.scaler.transform(X)
+#         return self.model.predict_proba(X_scaled)
+#
+#     def score(self, X, y):
+#         """计算准确率"""
+#         X_scaled = self.scaler.transform(X)
+#         return self.model.score(X_scaled, y)
+#
+#     def feature_importance(self, feature_names):
+#         """输出特征重要性"""
+#         importances = pd.DataFrame({
+#             'feature': feature_names,
+#             'importance': self.model.feature_importances_
+#         }).sort_values('importance', ascending=False)
+#         print(importances.head(20))
+#         return importances
+#
+#     def save_model(self, directory="saved_xgb_model"):
+#         """保存模型"""
+#         Path(directory).mkdir(parents=True, exist_ok=True)
+#         joblib.dump(self.model, f"{directory}/xgb_model.pkl")
+#         joblib.dump(self.scaler, f"{directory}/scaler.pkl")
+#         print(f"模型已保存至 {directory}")
+#
+#     @classmethod
+#     def load_model(cls, directory="saved_xgb_model"):
+#         """加载模型"""
+#         model = cls()
+#         model.model = joblib.load(f"{directory}/xgb_model.pkl")
 #         model.scaler = joblib.load(f"{directory}/scaler.pkl")
 #         print(f"模型已从 {directory} 加载")
 #         return model

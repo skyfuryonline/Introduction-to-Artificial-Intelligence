@@ -4,7 +4,7 @@
 # from prepare_data import prepare_data
 #
 # # 加载模型
-# model = StackingClassifier.load_model("my_stacking_model")
+# model = StackingClassifier.load_model("saved_xgb_model")
 #
 # # 准备测试数据
 # # 第二个值不需要，因为是预测
@@ -36,11 +36,14 @@
 
 import pandas as pd
 from Stacking import StackingClassifier
+# from Stacking import NeuralNetClassifier
+
 from dataprocess.dataset import test_data,train_data
 from prepare_data import prepare_data
 
 # 加载模型
-model = StackingClassifier.load_model("my_stacking_model")
+model = StackingClassifier.load_model("saved_xgb_model")
+# model = NeuralNetClassifier.load_model("saved_xgb_model")
 
 # 预处理测试数据，确保特征列与训练时一致
 X_train, _ = prepare_data(train_data)
@@ -62,7 +65,7 @@ predictions_df = pd.DataFrame({
 })
 
 # 保存为 CSV 文件
-output_path = "final_predictions.csv"
+output_path = "../../results/xgb_grid_search.csv"
 predictions_df.to_csv(output_path, index=False)
 print(f"预测结果已保存至 {output_path}")
 
