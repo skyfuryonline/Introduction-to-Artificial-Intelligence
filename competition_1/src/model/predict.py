@@ -42,7 +42,7 @@ from dataprocess.dataset import test_data,train_data
 from prepare_data import prepare_data
 
 # 加载模型
-model = StackingClassifier.load_model("best_stacking_model")
+model = StackingClassifier.load_model("best_model")
 # model = NeuralNetClassifier.load_model("best_xgboost_model")
 
 # 预处理测试数据，确保特征列与训练时一致
@@ -65,7 +65,7 @@ predictions_df = pd.DataFrame({
 })
 
 # 保存为 CSV 文件
-output_path = "./final_results.csv"
+output_path = "./results.csv"
 predictions_df.to_csv(output_path, index=False)
 print(f"预测结果已保存至 {output_path}")
 
