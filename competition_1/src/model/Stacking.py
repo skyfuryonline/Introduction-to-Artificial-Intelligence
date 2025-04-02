@@ -493,79 +493,209 @@
 
 
 # # 换用XGBoost----目前最好
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
+# from xgboost import XGBClassifier
+# from lightgbm import LGBMClassifier
+# from sklearn.preprocessing import StandardScaler
+# from sklearn.ensemble import VotingClassifier
+# import joblib
+# from pathlib import Path
+#
+# class StackingClassifier:
+#     def __init__(self, n_estimators=1000, max_depth=5, learning_rate=0.01, reg_lambda=1.0, random_state=42):
+#         """
+#         初始化集成模型：XGBoost + LightGBM
+#         """
+#         self.xgb = XGBClassifier(
+#             n_estimators=n_estimators,
+#             max_depth=max_depth,
+#             learning_rate=learning_rate,
+#             reg_lambda=reg_lambda,
+#             random_state=random_state,
+#             eval_metric='logloss',
+#             use_label_encoder=False
+#         )
+#         self.lgbm = LGBMClassifier(
+#             n_estimators=n_estimators,
+#             max_depth=max_depth,
+#             learning_rate=learning_rate,
+#             reg_lambda=reg_lambda,
+#             random_state=random_state
+#         )
+#         self.model = VotingClassifier(
+#             estimators=[('xgb', self.xgb), ('lgbm', self.lgbm)],
+#             voting='soft'
+#         )
+#         self.scaler = StandardScaler()
+#
+#     def fit(self, X, y):
+#         """训练模型"""
+#         X_scaled = self.scaler.fit_transform(X)
+#         self.model.fit(X_scaled, y)
+#         train_accuracy = self.model.score(X_scaled, y)
+#         print(f"训练集准确率: {train_accuracy:.4f}")
+#         return self
+#
+#     def predict(self, X):
+#         """预测类别"""
+#         X_scaled = self.scaler.transform(X)
+#         return self.model.predict(X_scaled)
+#
+#     def predict_proba(self, X):
+#         """预测概率"""
+#         X_scaled = self.scaler.transform(X)
+#         return self.model.predict_proba(X_scaled)
+#
+#     def score(self, X, y):
+#         """计算准确率"""
+#         X_scaled = self.scaler.transform(X)
+#         return self.model.score(X_scaled, y)
+#
+#     def save_model(self, directory="saved_voting_model"):
+#         """保存模型"""
+#         Path(directory).mkdir(parents=True, exist_ok=True)
+#         joblib.dump(self.model, f"{directory}/voting_model.pkl")
+#         joblib.dump(self.scaler, f"{directory}/scaler.pkl")
+#         print(f"模型已保存至 {directory}")
+#
+#     @classmethod
+#     def load_model(cls, directory="saved_voting_model"):
+#         """加载模型"""
+#         model = cls()
+#         model.model = joblib.load(f"{directory}/voting_model.pkl")
+#         model.scaler = joblib.load(f"{directory}/scaler.pkl")
+#         print(f"模型已从 {directory} 加载")
+#         return model
+
+# tabPFN
+from tabpfn import TabPFNClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import VotingClassifier
+from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.feature_selection import VarianceThreshold
+import numpy as np
 import joblib
 from pathlib import Path
-
+import pandas as pd
 class StackingClassifier:
-    def __init__(self, n_estimators=1000, max_depth=5, learning_rate=0.01, reg_lambda=1.0, random_state=42):
+    def __init__(self, tabpfn_params=None, random_state=42, max_features=100, max_samples=1024):
         """
-        初始化集成模型：XGBoost + LightGBM
+        初始化Stacking分类器，仅使用TabPFN作为唯一模型，并限制特征数和样本数
+        :param tabpfn_params: TabPFN参数字典
+        :param random_state: 随机种子
+        :param max_features: 最大特征数（适配TabPFN限制）
+        :param max_samples: 最大样本数（避免内存溢出）
         """
-        self.xgb = XGBClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            learning_rate=learning_rate,
-            reg_lambda=reg_lambda,
-            random_state=random_state,
-            eval_metric='logloss',
-            use_label_encoder=False
-        )
-        self.lgbm = LGBMClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            learning_rate=learning_rate,
-            reg_lambda=reg_lambda,
-            random_state=random_state
-        )
-        self.model = VotingClassifier(
-            estimators=[('xgb', self.xgb), ('lgbm', self.lgbm)],
-            voting='soft'
-        )
+        # 默认参数
+        default_tabpfn_params = {
+            'N_ensemble_configurations': 32,
+            'device': 'cpu',  # 可改为 'cuda' 如果有GPU
+            'seed': random_state
+        }
+
+        self.tabpfn_params = tabpfn_params if tabpfn_params else default_tabpfn_params
+        self.random_state = random_state
+        self.max_features = max_features
+        self.max_samples = max_samples  # 新增：最大样本数
+
+        self.tabpfn_model = TabPFNClassifier(**self.tabpfn_params)
         self.scaler = StandardScaler()
+        self.constant_filter = VarianceThreshold(threshold=0)
+        self.feature_selector = SelectKBest(score_func=f_classif, k=self.max_features)
 
     def fit(self, X, y):
-        """训练模型"""
+        """训练模型，加入采样、特征选择和常量特征过滤"""
+        # 数据标准化
         X_scaled = self.scaler.fit_transform(X)
-        self.model.fit(X_scaled, y)
-        train_accuracy = self.model.score(X_scaled, y)
+
+        # 移除常量特征
+        X_filtered = self.constant_filter.fit_transform(X_scaled)
+        print(f"移除常量特征后特征数: {X_filtered.shape[1]}")
+
+        # 特征选择：选择最重要的 max_features 个特征
+        X_selected = self.feature_selector.fit_transform(X_filtered, y)
+        print(f"原始特征数: {X_scaled.shape[1]}, 选择后特征数: {X_selected.shape[1]}")
+
+        # 采样：如果样本数超过 max_samples，则随机采样
+        if X_selected.shape[0] > self.max_samples:
+            np.random.seed(self.random_state)
+            sample_idx = np.random.choice(X_selected.shape[0], self.max_samples, replace=False)
+            X_sampled = X_selected[sample_idx]
+            y_sampled = y.iloc[sample_idx] if isinstance(y, (pd.Series, pd.DataFrame)) else y[sample_idx]
+            print(f"原始样本数: {X_selected.shape[0]}, 采样后样本数: {X_sampled.shape[0]}")
+        else:
+            X_sampled = X_selected
+            y_sampled = y
+            print(f"样本数: {X_sampled.shape[0]}（未采样）")
+
+        # 训练TabPFN
+        self.tabpfn_model.fit(X_sampled, y_sampled, overwrite_warning=True)
+
+        # 评估训练集性能（使用完整训练集）
+        train_pred = self.predict(X)
+        train_accuracy = np.mean(train_pred == y)
         print(f"训练集准确率: {train_accuracy:.4f}")
         return self
 
     def predict(self, X):
         """预测类别"""
         X_scaled = self.scaler.transform(X)
-        return self.model.predict(X_scaled)
+        X_filtered = self.constant_filter.transform(X_scaled)
+        X_selected = self.feature_selector.transform(X_filtered)
+        return self.tabpfn_model.predict(X_selected)
 
     def predict_proba(self, X):
         """预测概率"""
         X_scaled = self.scaler.transform(X)
-        return self.model.predict_proba(X_scaled)
+        X_filtered = self.constant_filter.transform(X_scaled)
+        X_selected = self.feature_selector.transform(X_filtered)
+        return self.tabpfn_model.predict_proba(X_selected)
 
     def score(self, X, y):
         """计算准确率"""
-        X_scaled = self.scaler.transform(X)
-        return self.model.score(X_scaled, y)
+        pred = self.predict(X)
+        return np.mean(pred == y)
 
-    def save_model(self, directory="saved_voting_model"):
+    def save_model(self, directory="saved_stacking_model"):
         """保存模型"""
         Path(directory).mkdir(parents=True, exist_ok=True)
-        joblib.dump(self.model, f"{directory}/voting_model.pkl")
+        joblib.dump(self.tabpfn_model, f"{directory}/tabpfn_model.pkl")
         joblib.dump(self.scaler, f"{directory}/scaler.pkl")
+        joblib.dump(self.constant_filter, f"{directory}/constant_filter.pkl")
+        joblib.dump(self.feature_selector, f"{directory}/feature_selector.pkl")
         print(f"模型已保存至 {directory}")
 
     @classmethod
-    def load_model(cls, directory="saved_voting_model"):
+    def load_model(cls, directory="saved_stacking_model"):
         """加载模型"""
         model = cls()
-        model.model = joblib.load(f"{directory}/voting_model.pkl")
+        model.tabpfn_model = joblib.load(f"{directory}/tabpfn_model.pkl")
         model.scaler = joblib.load(f"{directory}/scaler.pkl")
+        model.constant_filter = joblib.load(f"{directory}/constant_filter.pkl")
+        model.feature_selector = joblib.load(f"{directory}/feature_selector.pkl")
         print(f"模型已从 {directory} 加载")
         return model
 
+    def get_params(self, deep=True):
+        """返回模型参数，用于GridSearchCV"""
+        return {
+            'tabpfn_params': self.tabpfn_params,
+            'random_state': self.random_state,
+            'max_features': self.max_features,
+            'max_samples': self.max_samples
+        }
+
+    def set_params(self, **params):
+        """设置模型参数，用于GridSearchCV"""
+        if 'tabpfn_params' in params:
+            self.tabpfn_params = params['tabpfn_params']
+            self.tabpfn_model = TabPFNClassifier(**self.tabpfn_params)
+        if 'random_state' in params:
+            self.random_state = params['random_state']
+        if 'max_features' in params:
+            self.max_features = params['max_features']
+            self.feature_selector = SelectKBest(score_func=f_classif, k=self.max_features)
+        if 'max_samples' in params:
+            self.max_samples = params['max_samples']
+        return self
 
 # 神经网络
 # from sklearn.neural_network import MLPClassifier
